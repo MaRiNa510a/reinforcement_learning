@@ -5,59 +5,67 @@ import matplotlib.pyplot as plt
 import pickle
 from matplotlib import style
 import time
+from PIL import Image
 
-#ggplot:make the table to plot
+im = cv2.imread("smile_test.png")
+cv2.imshow("input image", im)
+
 style.use("ggplot")
 
-SIZE = 10
-#how many episodes
-HM_EPISODES = 15000
+h, w, _ = im.shape
+SIZE_x = w
+SIZE_y = h
+
+HM_EPISODES = 100
+
 MOVE_PENALTY = 1
-ENEMY_PENALTY = 300
-FOOD_REWARD = 25
+BLACK_REWARD = 25
+WHITE_PENALTY = 300
 
 epsilon = 0.9
 EPS_DECAY = 0.9998
-#how often show
 SHOW_EVERY = 3000
 
-start_q_table = None #or filename
+start_q_table = None
 
 LEARNING_RATE = 0.1
 DISCOUNT = 0.95
 
-PLAYER_N = 1
-FOOD_N = 2
-ENEMY_N = 3
+AGENT_N = 1
+BLACK_N = 2
+WHITE_N = 3
 
-#set up the color
 d = {
-    1:(255, 175, 0), #Gritish blue
-    2:(0, 255, 0),   #Green
-    3:(0, 0, 255)    #Red
+    1:(0, 0, 255),       #Red
+    2:(0, 0, 0),         #Black
+    3:(255, 255, 255)    #White
     }
+
 
 class Blob:
     def __init__(self):
-        self.x = np.random.randint(0, SIZE)
-        self.y = np.random.randint(0, SIZE)
+        self.x = np.random.randint(0, SIZE_x)
+        self.y = np.random.randint(0, SIZE_y)
 
     def __str__(self):
-        #how to show the string
         return f"{self.x}, {self.y}"
-    #set the subtraction
+
     def __sub__(self, other):
-        return (self.x - other.x, self.y - other.y)
+        return (self.x - other.x, self.y - other.y) #?
 
     def action(self, choice):
+        #up
         if choice == 0:
-            self.move(x=1, y=1)
+            self.move(x=0, y=1)
+        #down
         elif choice == 1:
-            self.move(x=-1, y=-1)
+            self.move(x=0, y=-1)
+        #left
         elif choice == 2:
-            self.move(x=-1, y=1)
+            self.move(x=-1, y=0)
+        #right
         elif choice == 3:
-            self.move(x=1, y=-1)
+            self.move(x=1, y=0)
 
     def move(self, x=False, y=False):
         # x=False
@@ -73,28 +81,28 @@ class Blob:
 
         if self.x < 0:
             self.x = 0
-        elif self.x > SIZE -1:
-            self.x = SIZE -1
+        elif self.x > SIZE_x -1:
+            self.x = SIZE_x -1
         if self.y < 0:
             self.y = 0
-        elif self.y > SIZE -1:
-            self.y = SIZE -1
+        elif self.y > SIZE_y -1:
+            self.y = SIZE_y -1
 
 if start_q_table is None:
     q_table = {}
-    for x1 in range(-SIZE+1, SIZE):
-        for y1 in range(-SIZE+1, SIZE):
-            for x2 in range(-SIZE+1, SIZE):
-                for y2 in range(-SIZE+1, SIZE):
+    for x1 in range(-SIZE_x+1, SIZE_x):
+        for y1 in range(-SIZE_y+1, SIZE_y):
+            for x2 in range(-SIZE_x+1, SIZE_x):
+                for y2 in range(-SIZE_y+1, SIZE_y):
                     q_table[((x1, y1), (x2, y2))] = [np.random.uniform(-5, 0) for i in range(4)]
 else:
     with open(start_q_table, "rb") as f: #rb means read the binary file
         q_table = pickle.load(f)
 
 for episode in range(HM_EPISODES):
-    player = Blob()
-    food = Blob()
-    enemy = Blob()
+    agent = Blob()
+    black_point = Blob()
+    white_point = Blob()
 
     episode_reward = []
     if episode % SHOW_EVERY == 0:
@@ -109,48 +117,44 @@ for episode in range(HM_EPISODES):
     # episode_reward = []
     for i in range(200):
         #observation
-        obs = (player - food, player - enemy)
+        obs = (agent - black_point, agent - white_point)
         if np.random.random() > epsilon:
             action = np.argmax(q_table[obs])
         else:
             action = np.random.randint(0, 4)
 
-    player.action(action)
+    agent.action(action)
 
-    #enemy.move()
-    #food.move()
-
-    if player.x == enemy.x and player.y == enemy.y:
-        reward = -ENEMY_PENALTY
-    elif player.x == food.x and player.y == food.y:
-        reward = FOOD_REWARD
+    if agent.x == black_point.x and agent.y == black_point.y:
+        reward = BLACK_REWARD
+    elif agent.x == white_point.x and agent.y == white_point.y:
+        reward = -WHITE_PENALTY
     else:
         reward = -MOVE_PENALTY
 
-    new_obs = (player - food, player - enemy)
+    new_obs = (agent - black_point, agent - white_point)
     max_future_q = np.max(q_table[new_obs])
     current_q = q_table[obs][action]
 
-    if reward == FOOD_REWARD:
-        new_q = FOOD_REWARD
-    elif reward == -ENEMY_PENALTY:
-        new_q = -ENEMY_PENALTY
+    if reward == BLACK_REWARD:
+        new_q = BLACK_REWARD
+    elif reward == -WHITE_PENALTY:
+        new_q = -WHITE_PENALTY
     else:
         new_q =(1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
 
     q_table[obs][action] = new_q
 
     if show:
-        env = np.zeros((SIZE, SIZE, 3), dtype = np.uint8)  #3 means BGR
-        env[player.y][player.x] = d[PLAYER_N]
-        env[food.y][food.x] = d[FOOD_N]
-        env[enemy.y][enemy.x] = d[ENEMY_N]
+        env = np.zeros((SIZE_x, SIZE_y, 3), dtype = np.uint8)  #3 means BGR
+        env[agent.y][agent.x] = d[AGENT_N]
+        env[black_point.y][black_point.x] = d[BLACK_REWARD]
+        env[white_point.y][white_point.x] = d[WHITE_PENALTY]
 
         img = Image.fromarray(env, "RGB")
         img = img.resize((300, 300))
         cv2.imshow("", np.array(img))
-        if reward == FOOD_REWARD or reward == ENEMY_PENALTY:
-            #0xFF = 11111111
+        if reward == BLACK_REWARD or reward == WHITE_PENALTY:
             if cv2.waitKey(500) & 0xFF == ord("q"):
                 break
             else:
@@ -160,14 +164,4 @@ for episode in range(HM_EPISODES):
     episode_reward.append(episode_reward)
     epsilon *= EPS_DECAY
 
-#convolve means 畳み込み積分, valid means not results when agent can't 畳み込み積分
-'''There are always ValueError from below sentence. I think the code with np.ones is maybe wrong'''
-moving_avg = np.convolve(episode_reward, np.ones((SHOW_EVERY,)) / SHOW_EVERY, mode = "valid")
 
-plt.plot([i for i in range(len(moving_avg))], moving_avg)
-plt.ylabel(f"reward {SHOW_EVERY}ma")
-plt.xlabel("episode #")
-plt.show()
-
-with open(f"qtable-{int(time.time())}.pickle", "wb") as f:
-    pickle.dump(q_table, f)
